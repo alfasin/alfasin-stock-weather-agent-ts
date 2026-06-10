@@ -2,8 +2,6 @@
 
 A workshop project demonstrating AI agents with tool use. Build a ReAct-style agent **and** a Planning-style agent from scratch that combine stock market data and weather forecasts to make predictions based on the (fun) hypothesis that rainy days correlate with lower stock performance.
 
-> Looking for the Python version? It lives at [`alfasin/stock-weather-agent`](https://github.com/alfasin/stock-weather-agent). The two repos are content-equivalent — solve the same exercises in whichever language you prefer.
-
 ## What Makes a System "Agentic"?
 
 An **agent** is more than a chatbot. It has:
