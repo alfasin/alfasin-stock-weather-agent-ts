@@ -8,6 +8,10 @@
  * based on the (fun) hypothesis that rainy days correlate with lower stock performance.
  */
 
+// Side-effect import: must come before any module that reads process.env
+// (so this file works when run directly via `tsx src/assignments/reactAgent.ts`).
+import "dotenv/config";
+
 import Groq from "groq-sdk";
 import type {
   ChatCompletion,
