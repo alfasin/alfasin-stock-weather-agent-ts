@@ -25,15 +25,7 @@ import type {
 } from "groq-sdk/resources/chat/completions";
 
 import { GROQ_API_KEY, GROQ_MODEL } from "../config.js";
-import { TOOLS, TOOL_FUNCTIONS } from "../tools/index.js";
-import { getStockPrice } from "../tools/stockTool.js";
-import { getWeather } from "../tools/weatherTool.js";
-
-// Suppress "unused import" warnings — these are referenced by students completing
-// the exercises. Keep parity with the Python file.
-void TOOLS;
-void getStockPrice;
-void getWeather;
+import { TOOL_FUNCTIONS } from "../tools/index.js";
 
 export interface PlanStep {
   tool: string;
@@ -115,10 +107,17 @@ async function callLlm(
   throw new Error("Max retries exceeded.");
 }
 
-// Silence "unused" warnings — these helpers are referenced by students.
-void PLANNING_PROMPT;
-void SYNTHESIS_PROMPT;
-void callLlm;
+/**
+ * Extract a JSON array from the LLM response. The LLM sometimes wraps the
+ * plan in a markdown ```json``` fence or adds prose around it.
+ */
+function parsePlan(planText: string | null): PlanStep[] {
+  if (!planText) return [];
+  const start = planText.indexOf("[");
+  const end = planText.lastIndexOf("]");
+  if (start === -1 || end === -1 || end < start) return [];
+  return JSON.parse(planText.slice(start, end + 1)) as PlanStep[];
+}
 
 /**
  * Run the Planning agent (Plan-then-Execute pattern).
@@ -140,30 +139,23 @@ export async function runPlanningAgent(userQuery: string): Promise<string> {
   // ================================================================
   console.log("\n--- Phase 1: Planning ---");
 
-  // ============================================================
-  // TODO Exercise A: Create the Planning Request
-  // ============================================================
-  // Create a messages list with:
-  // 1. System message using PLANNING_PROMPT
-  // 2. User message with the query
-  //
-  // Then call the LLM and extract the plan from the response.
-  //
-  // Hint: The LLM will return a JSON array of tool calls.
-  // You'll need to parse it with JSON.parse()
-  //
-  // YOUR CODE HERE:
-  const planningMessages: ChatCompletionMessageParam[] = []; // Fix this!
+  // Exercise A: ask the LLM for a JSON plan of tool calls.
+  const planningMessages: ChatCompletionMessageParam[] = [
+    { role: "system", content: PLANNING_PROMPT },
+    { role: "user", content: userQuery },
+  ];
 
-  // Call LLM to get the plan
-  // const response = await callLlm(planningMessages);
-  // const planText = response.choices[0].message.content;
+  const planResponse = await callLlm(planningMessages);
+  const planText = planResponse.choices[0]?.message.content ?? null;
 
-  let plan: PlanStep[] = []; // This should be the parsed JSON array
-  // ============================================================
-
-  // Silence "unused variable" warning until the student wires it up.
-  void planningMessages;
+  let plan: PlanStep[];
+  try {
+    plan = parsePlan(planText);
+  } catch (err) {
+    console.log(`  ⚠️  Failed to parse plan: ${err instanceof Error ? err.message : String(err)}`);
+    console.log(`  Raw plan text: ${planText}`);
+    plan = [];
+  }
 
   console.log(`Plan: ${JSON.stringify(plan, null, 2)}`);
 
@@ -176,20 +168,8 @@ export async function runPlanningAgent(userQuery: string): Promise<string> {
   // ================================================================
   console.log("\n--- Phase 2: Execution ---");
 
-  // ============================================================
-  // TODO Exercise B: Execute the Plan
-  // ============================================================
-  // Loop through each step in the plan and execute the tool.
-  // Store results in a list for the synthesis phase.
-  //
-  // Structure of each step: { tool: "tool_name", args: { ... } }
-  //
-  // Handle these cases:
-  // 1. Tool exists: execute it and store the result
-  // 2. Tool doesn't exist: store an error message
-  //
-  // YOUR CODE HERE:
-  const results: PlanResult[] = []; // List of { tool, args, result }
+  // Exercise B: execute each step sequentially, dispatching via TOOL_FUNCTIONS.
+  const results: PlanResult[] = [];
 
   for (const step of plan) {
     const toolName = step.tool;
@@ -197,12 +177,10 @@ export async function runPlanningAgent(userQuery: string): Promise<string> {
 
     console.log(`  Executing: ${toolName}(${JSON.stringify(toolArgs)})`);
 
-    // Execute the tool
-    // Hint: Check if toolName is in TOOL_FUNCTIONS
-    // If yes: const result = await TOOL_FUNCTIONS[toolName](toolArgs);
-    // If no:  const result = `Error: Unknown tool '${toolName}'`;
-
-    const result = "???"; // Fix this!
+    const toolFn = TOOL_FUNCTIONS[toolName];
+    const result = toolFn
+      ? await toolFn(toolArgs)
+      : `Error: Unknown tool '${toolName}'`;
 
     console.log(`  Result: ${result}`);
     results.push({
@@ -211,10 +189,6 @@ export async function runPlanningAgent(userQuery: string): Promise<string> {
       result,
     });
   }
-  // ============================================================
-
-  // Silence "unused" warning until the student wires up Exercise C.
-  void results;
 
   // ================================================================
   // PHASE 3: SYNTHESIS
@@ -224,39 +198,21 @@ export async function runPlanningAgent(userQuery: string): Promise<string> {
   // ================================================================
   console.log("\n--- Phase 3: Synthesis ---");
 
-  // ============================================================
-  // TODO Exercise C: Synthesize the Final Answer
-  // ============================================================
-  // Create a messages list with:
-  // 1. System message using SYNTHESIS_PROMPT
-  // 2. User message containing:
-  //    - The original query
-  //    - All tool results (formatted nicely)
-  //
-  // Format suggestion for the user message:
-  // `
-  // User question: ${userQuery}
-  //
-  // Tool results:
-  // - get_weather({"city": "New York"}): The weather in New York is rainy...
-  // - get_stock_price({"ticker": "AAPL"}): Current price for AAPL...
-  // `
-  //
-  // YOUR CODE HERE:
-  const synthesisMessages: ChatCompletionMessageParam[] = []; // Fix this!
+  // Exercise C: format tool results, ask the LLM to synthesize a final answer.
+  const formattedResults = results
+    .map((r) => `- ${r.tool}(${JSON.stringify(r.args)}): ${r.result}`)
+    .join("\n");
 
-  // Call LLM to synthesize
-  // const response = await callLlm(synthesisMessages);
-  // const finalAnswer = response.choices[0].message.content;
+  const synthesisMessages: ChatCompletionMessageParam[] = [
+    { role: "system", content: SYNTHESIS_PROMPT },
+    {
+      role: "user",
+      content: `User question: ${userQuery}\n\nTool results:\n${formattedResults}`,
+    },
+  ];
 
-  const finalAnswer = "TODO: Implement synthesis phase"; // Fix this!
-  // ============================================================
-
-  void synthesisMessages;
-  void userQuery;
-  void TOOL_FUNCTIONS;
-
-  return finalAnswer;
+  const synthesisResponse = await callLlm(synthesisMessages);
+  return synthesisResponse.choices[0]?.message.content ?? "";
 }
 
 // Allow running this file directly: `tsx src/assignments/planningAgent.ts`

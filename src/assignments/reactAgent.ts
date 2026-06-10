@@ -20,12 +20,6 @@ import type {
 
 import { GROQ_API_KEY, GROQ_MODEL } from "../config.js";
 import { TOOLS, TOOL_FUNCTIONS } from "../tools/index.js";
-import { getStockPrice } from "../tools/stockTool.js";
-import { getWeather } from "../tools/weatherTool.js";
-
-// Suppress "unused import" warnings — TOOL_FUNCTIONS is imported because students
-// may reference it when completing Exercise C. Keep parity with the Python file.
-void TOOL_FUNCTIONS;
 
 // System prompt that defines the agent's personality and behavior
 const SYSTEM_PROMPT = `You are a financial analyst with an unusual theory: you believe rainy weather correlates with lower stock performance.
@@ -114,8 +108,31 @@ export async function runAgent(
     { role: "user", content: userQuery },
   ];
 
+  // Exercise E state: track recent tool calls to detect infinite loops.
+  const toolCallHistory: string[] = [];
+  const LOOP_THRESHOLD = 3;
+
+  // Exercise D constant: cap message history to avoid token-limit / cost bloat.
+  const MEMORY_LIMIT = 20;
+
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     console.log(`\n--- Iteration ${iteration + 1} ---`);
+
+    // Exercise D: trim message history if it has grown beyond the limit.
+    // Always keep system (index 0) and the original user query (index 1).
+    // Drop oldest assistant/tool messages, taking care not to leave an orphan
+    // "tool" role as the first kept message (the API requires it follow an
+    // assistant message with tool_calls).
+    if (messages.length > MEMORY_LIMIT) {
+      const system = messages[0]!;
+      const userMsg = messages[1]!;
+      let tail = messages.slice(-(MEMORY_LIMIT - 2));
+      while (tail.length > 0 && tail[0]!.role === "tool") {
+        tail = tail.slice(1);
+      }
+      messages.length = 0;
+      messages.push(system, userMsg, ...tail);
+    }
 
     // Call the LLM (with retry for rate limiting)
     const response = await callLlmWithRetry(messages, TOOLS);
@@ -123,104 +140,68 @@ export async function runAgent(
     const msg = response.choices[0]!.message;
     console.log(`Assistant: ${msg.content || "(calling tools...)"}`);
 
-    // ============================================================
-    // TODO Exercise A: Add Memory (Message History)
-    // ============================================================
-    // The agent needs to "remember" what it said.
-    // Append the assistant's response to the messages list.
-    // This is critical - without this, the agent forgets everything!
-    //
-    // Hint: messages.push({ role: "assistant", ... })
-    // You need to include both 'content' and 'tool_calls' if present.
-    //
-    // YOUR CODE HERE:
-    // (Nothing to do yet — remove this comment and add your code)
-    // ============================================================
+    // Exercise A: append the assistant's response so the model "remembers" it.
+    // Include tool_calls when present so the API can later match tool results
+    // back to their originating call.
+    messages.push({
+      role: "assistant",
+      content: msg.content,
+      ...(msg.tool_calls ? { tool_calls: msg.tool_calls } : {}),
+    });
 
-    // ============================================================
-    // TODO Exercise B: Handle Tool Calls
-    // ============================================================
-    // Check if the LLM wants to call tools (msg.tool_calls).
-    // If NO tool calls: the agent is done, return msg.content
-    // If YES tool calls: execute each tool and continue the loop
-    //
-    // YOUR CODE HERE:
-    // (Nothing to do yet — remove this comment and add your code)
-    // ============================================================
+    // Exercise B: if the LLM didn't request any tools, we're done.
+    if (!msg.tool_calls || msg.tool_calls.length === 0) {
+      return msg.content ?? "";
+    }
 
     // Process each tool call
-    const toolCalls = msg.tool_calls ?? [];
-    for (const toolCall of toolCalls) {
+    for (const toolCall of msg.tool_calls) {
       const fnName = toolCall.function.name;
       const fnArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
 
       console.log(`  Tool call: ${fnName}(${JSON.stringify(fnArgs)})`);
 
-      // ============================================================
-      // TODO Exercise C: Handle Tool Hallucinations
-      // ============================================================
-      // Sometimes LLMs "hallucinate" tools that don't exist!
-      // If fnName is not in our TOOL_FUNCTIONS, we need to tell
-      // the LLM that this tool doesn't exist.
-      //
-      // Current code will crash if the LLM calls a non-existent tool.
-      // Fix it by returning an error message for unknown tools.
-      //
-      // YOUR CODE HERE (fix the else branch):
+      // Exercise E: record this call and check whether we're stuck in a loop.
+      const callKey = `${fnName}:${JSON.stringify(fnArgs)}`;
+      toolCallHistory.push(callKey);
+      const repeatCount = toolCallHistory.filter((k) => k === callKey).length;
+
+      // Exercise C: dispatch via the TOOL_FUNCTIONS registry. Unknown names
+      // (LLM hallucinations like "get_company_news") return a clear error
+      // string instead of crashing, so the LLM can self-correct.
       let observation: string;
-      if (fnName === "get_stock_price") {
-        observation = await getStockPrice(String(fnArgs.ticker ?? "AAPL"));
-      } else if (fnName === "get_weather") {
-        observation = await getWeather(String(fnArgs.city ?? "New York"));
+      const toolFn = TOOL_FUNCTIONS[fnName];
+      if (toolFn) {
+        observation = await toolFn(fnArgs);
       } else {
-        // 🚨 BUG: What happens if fnName is "get_company_news"?
-        // The LLM might hallucinate tools that don't exist!
-        // Return an error message so the LLM knows to try something else.
-        observation = "???"; // Fix this!
+        const available = Object.keys(TOOL_FUNCTIONS).join(", ");
+        observation = `Error: tool '${fnName}' does not exist. Available tools: ${available}.`;
       }
-      // ============================================================
 
       console.log(`  Result: ${observation}`);
 
-      // Add the tool result to messages
       messages.push({
         role: "tool",
         tool_call_id: toolCall.id,
         content: observation,
       });
+
+      // Exercise E: after recording the tool result, if the same call has
+      // happened too many times, nudge the LLM to give a final answer.
+      if (repeatCount >= LOOP_THRESHOLD) {
+        console.log(
+          `  ⚠️  Detected loop: ${callKey} called ${repeatCount} times. Nudging the agent.`
+        );
+        messages.push({
+          role: "user",
+          content:
+            "You've called the same tool with the same arguments multiple times. " +
+            "Stop calling tools and give a final answer based on what you already know.",
+        });
+        break;
+      }
     }
   }
-
-  // ============================================================
-  // TODO Exercise D: Handle Memory Bloat
-  // ============================================================
-  // The messages list can grow very large over many iterations.
-  // This can cause:
-  // - Token limit exceeded errors
-  // - Slower responses
-  // - Higher API costs
-  //
-  // Implement a strategy to manage memory:
-  // Option 1: Keep only the last N messages (simple)
-  // Option 2: Summarize older messages (advanced)
-  // Option 3: Keep system + user + last N assistant/tool messages
-  //
-  // Add your memory management code somewhere in this function!
-  // ============================================================
-
-  // ============================================================
-  // TODO Exercise E: Handle Infinite Loops
-  // ============================================================
-  // Sometimes the LLM gets "stuck" calling the same tool repeatedly.
-  // For example, it might keep calling get_stock_price("AAPL") forever.
-  //
-  // Implement loop detection:
-  // 1. Track recent tool calls (name + args)
-  // 2. If the same call appears 3+ times, break the loop
-  // 3. Add a message nudging the LLM to give a final answer
-  //
-  // Add your loop detection code in this function!
-  // ============================================================
 
   return "Max iterations reached. The agent couldn't complete the task.";
 }
