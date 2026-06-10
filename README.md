@@ -51,8 +51,8 @@ Final Answer
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/alfasin/alfasin-stock-weather-agent-ts.git
-cd alfasin-stock-weather-agent-ts
+git clone https://github.com/alfasin/stock-weather-agent-ts.git
+cd stock-weather-agent-ts
 npm install
 ```
 
@@ -178,4 +178,4 @@ Cache files (`cache/stock_${TICKER}_${YYYY-MM-DD}.json`, `cache/weather_${city_k
 
 - ESM-only (`"type": "module"`). Imports use the `.js` extension (TS convention for ESM source).
 - `tsx` runs `.ts` files directly — no build step required for the workshop. `npm run build` is available if you want to emit `dist/`.
-- Solutions to all exercises live on the [`solutions`](https://github.com/alfasin/alfasin-stock-weather-agent-ts/tree/solutions) branch — instructors only.
+- Solutions to all exercises live on the [`solutions`](https://github.com/alfasin/stock-weather-agent-ts/tree/solutions) branch — instructors only.
