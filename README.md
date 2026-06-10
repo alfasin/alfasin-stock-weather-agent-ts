@@ -1,32 +1,97 @@
 # Rainy Day Stock Agent (TypeScript)
 
-TypeScript port of the [`stock-weather-agent`](../README.md) educational workshop. A ReAct-style and a Planning-style agent that combine stock data and weather forecasts to make (fun, not-financial-advice) predictions based on the hypothesis that rainy days correlate with lower stock performance.
+A workshop project demonstrating AI agents with tool use. Build a ReAct-style agent **and** a Planning-style agent from scratch that combine stock market data and weather forecasts to make predictions based on the (fun) hypothesis that rainy days correlate with lower stock performance.
 
-> See the Python `README.md` and `Anatomy_of_an_AI_Agent.pdf` in the repo root for the conceptual workshop intro — this README focuses on the TypeScript-specific bits.
+> Looking for the Python version? It lives at [`alfasin/stock-weather-agent`](https://github.com/alfasin/stock-weather-agent). The two repos are content-equivalent — solve the same exercises in whichever language you prefer.
+
+## What Makes a System "Agentic"?
+
+An **agent** is more than a chatbot. It has:
+
+| Chatbot | Agent |
+|---------|-------|
+| Responds to one message | Runs autonomously until task is done |
+| No tools | Uses tools (APIs, functions, databases) |
+| Stateless | Maintains memory across turns |
+| Single response | Loops: Reason → Act → Observe → Repeat |
+
+### The Agent Loop
+
+```
+User Query
+    ↓
+┌─────────────────────────┐
+│  1. PERCEIVE            │  ← Read input/observations
+│  2. REASON              │  ← Decide what to do next
+│  3. ACT                 │  ← Call a tool or respond
+│  4. OBSERVE             │  ← Get tool result
+│  └──→ Loop until done   │
+└─────────────────────────┘
+    ↓
+Final Answer
+```
+
+## What You'll Learn
+
+- How AI agents work under the hood (the ReAct loop)
+- Tool / function calling with LLMs
+- Message history management (agent "memory")
+- Handling edge cases: hallucinations, loops, memory bloat
+- The difference between ReAct (interleaved) and Planning (plan-then-execute)
 
 ## Tech Stack
 
-- **LLM**: Groq via [`groq-sdk`](https://www.npmjs.com/package/groq-sdk)
-- **Stock Data**: Financial Modeling Prep (optional — falls back to mock data)
-- **Weather Data**: Open-Meteo (free, no key)
-- **Runtime**: Node.js 20+ with [`tsx`](https://www.npmjs.com/package/tsx) for edit-and-run TypeScript
+- **LLM**: Groq via [`groq-sdk`](https://www.npmjs.com/package/groq-sdk) (free tier, very fast inference)
+- **Stock Data**: [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs) — optional, falls back to mock data
+- **Weather Data**: [Open-Meteo](https://open-meteo.com/) — free, no API key required
+- **Runtime**: Node.js 20+ with [`tsx`](https://www.npmjs.com/package/tsx) for edit-and-run TypeScript (no build step)
 
 ## Quick Start
 
+### 1. Clone and install
+
 ```bash
-cd typescript
+git clone https://github.com/alfasin/alfasin-stock-weather-agent-ts.git
+cd alfasin-stock-weather-agent-ts
 npm install
-cp .env.example .env
-# Edit .env and add GROQ_API_KEY (FMP_API_KEY is optional)
 ```
 
-### Run the agents
+### 2. Get API keys
+
+You need **one or two API keys**:
+
+| API | Required? | Get it at |
+|-----|-----------|-----------|
+| Groq | Yes | https://console.groq.com/ |
+| Financial Modeling Prep | Optional* | https://site.financialmodelingprep.com/developer/docs |
+
+*Stock data falls back to mock data if `FMP_API_KEY` is missing.
+Weather (Open-Meteo) requires **no key**.
+
+### Model Selection
+
+Override the default Groq model via `GROQ_MODEL` in `.env`:
+
+| Model | Best for | Rate limits |
+|-------|----------|-------------|
+| `meta-llama/llama-4-scout-17b-16e-instruct` | **Default** — best balance | 30K TPM, 500K TPD |
+| `llama-3.1-8b-instant` | Workshops with many students | 14.4K RPD, 500K TPD |
+| `llama-3.3-70b-versatile` | Best reasoning (lower limits) | 1K RPD, 100K TPD |
+
+### 3. Configure environment
 
 ```bash
-# ReAct agent (default) - interleaved reasoning + action
+cp .env.example .env
+# Edit .env and add your API keys
+```
+
+### 4. Run the agent
+
+```bash
+# ReAct agent (default) — interleaved reasoning + action
 npm run dev -- "What's the outlook for AAPL?"
 
-# Planning agent - plan first, then execute all
+# Planning agent — plan first, then execute all
 npm run dev -- --planning "What's the outlook for NVDA in NYC?"
 ```
 
@@ -45,52 +110,72 @@ npm run test:stock     # uses mock data unless FMP_API_KEY is set
 npm run typecheck      # tsc --noEmit
 ```
 
-## Project Structure
-
-```
-typescript/
-├── package.json
-├── tsconfig.json
-├── .env.example
-├── src/
-│   ├── main.ts                    # CLI entry point
-│   ├── config.ts                  # env loading, models, city coordinates
-│   ├── mockData.ts                # offline fallback data
-│   ├── tools/
-│   │   ├── index.ts               # TOOLS schema + TOOL_FUNCTIONS registry
-│   │   ├── stockTool.ts           # getStockPrice() with caching
-│   │   └── weatherTool.ts         # getWeather() with caching
-│   └── assignments/
-│       ├── reactAgent.ts          # ReAct pattern — complete TODO A–E
-│       └── planningAgent.ts       # Planning pattern — complete TODO A–C
-└── cache/                          # runtime artifacts (gitignored)
-```
-
 ## Workshop Exercises
 
-The TODOs are identical to the Python version. Solving Exercise A in `reactAgent.ts` is exactly the same idea as `react_agent.py` Exercise A — just translated to TS syntax.
+The skeleton compiles and runs — but the agents won't actually work until you complete the TODO blocks. Each exercise is a small, focused piece you implement inside the existing files.
 
 ### ReAct Agent (`src/assignments/reactAgent.ts`)
 
-| Exercise | Topic |
-|---|---|
-| **A** | Memory — append the assistant message to history |
-| **B** | Tool calls — branch on `msg.tool_calls`, return early when done |
-| **C** | Hallucinations — handle unknown tool names |
-| **D** | Memory bloat — trim/summarize old messages |
-| **E** | Infinite loops — detect repeated tool calls and break |
+**Learning goals:** dynamic reasoning, tool calling, memory management, error handling.
+
+| Exercise | Topic | What you'll write |
+|----------|-------|-------------------|
+| **A** | Memory | Append the assistant's response to message history |
+| **B** | Tool calls | Branch on `msg.tool_calls`, return early when the LLM gives a final answer |
+| **C** | Hallucinations | Handle unknown tool names instead of crashing |
+| **D** | Memory bloat | Trim or summarize the message list when it grows too large |
+| **E** | Infinite loops | Detect when the LLM is stuck calling the same tool repeatedly |
 
 ### Planning Agent (`src/assignments/planningAgent.ts`)
 
-| Exercise | Topic |
-|---|---|
-| **A** | Planning request — build messages, call LLM, `JSON.parse` the plan |
-| **B** | Execution — loop the plan, dispatch via `TOOL_FUNCTIONS` |
-| **C** | Synthesis — format results, ask the LLM for the final answer |
+**Learning goals:** upfront planning, sequential execution, result synthesis.
 
-## Notes on the port
+| Exercise | Topic | What you'll write |
+|----------|-------|-------------------|
+| **A** | Planning request | Build messages, call the LLM, `JSON.parse` the returned plan |
+| **B** | Execution | Loop the plan, dispatch via `TOOL_FUNCTIONS`, handle unknown tools |
+| **C** | Synthesis | Format the results, ask the LLM for the final answer |
+
+## Agent Patterns Compared
+
+Try the same query with both to see the difference!
+
+**Query:** "What's the outlook for NVDA in NYC?"
+
+| Pattern | Flow |
+|---------|------|
+| **ReAct** | Reason("need weather") → `get_weather` → Reason("need stock") → `get_stock_price` → Answer |
+| **Planning** | Plan(`[get_weather, get_stock_price]`) → Execute all → Answer |
+
+| Pattern | Best for |
+|---------|----------|
+| **ReAct** | Dynamic tasks where the next step depends on previous results |
+| **Planning** | Tasks with known steps that can be planned upfront |
+
+## Project Structure
+
+```
+.
+├── package.json
+├── tsconfig.json
+├── .env.example
+└── src/
+    ├── main.ts                    # CLI entry point
+    ├── config.ts                  # env loading, models, city coordinates
+    ├── mockData.ts                # offline fallback data
+    ├── tools/
+    │   ├── index.ts               # TOOLS schema + TOOL_FUNCTIONS registry
+    │   ├── stockTool.ts           # getStockPrice() with caching
+    │   └── weatherTool.ts         # getWeather() with caching
+    └── assignments/
+        ├── reactAgent.ts          # ReAct pattern — complete TODO A–E
+        └── planningAgent.ts       # Planning pattern — complete TODO A–C
+```
+
+Cache files (`cache/stock_${TICKER}_${YYYY-MM-DD}.json`, `cache/weather_${city_key}_${YYYY-MM-DD}.json`) are created at runtime and gitignored.
+
+## Notes
 
 - ESM-only (`"type": "module"`). Imports use the `.js` extension (TS convention for ESM source).
 - `tsx` runs `.ts` files directly — no build step required for the workshop. `npm run build` is available if you want to emit `dist/`.
-- Cache files use the same naming convention as the Python version: `stock_${TICKER}_${YYYY-MM-DD}.json` and `weather_${city_key}_${YYYY-MM-DD}.json`.
-- The Pydantic AI bonus (`bonus/pydantic_ai_version.py` in the Python project) has no direct TS analogue. The closest TypeScript equivalent in spirit is the [Vercel AI SDK](https://sdk.vercel.ai/) — left as an exercise.
+- Solutions to all exercises live on the [`solutions`](https://github.com/alfasin/alfasin-stock-weather-agent-ts/tree/solutions) branch — instructors only.
