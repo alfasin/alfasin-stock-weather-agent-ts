@@ -2,8 +2,6 @@
 
 A workshop project demonstrating AI agents with tool use. Build a ReAct-style agent **and** a Planning-style agent from scratch that combine stock market data and weather forecasts to make predictions based on the (fun) hypothesis that rainy days correlate with lower stock performance.
 
-> Looking for the Python version? It lives at [`alfasin/stock-weather-agent`](https://github.com/alfasin/stock-weather-agent). The two repos are content-equivalent — solve the same exercises in whichever language you prefer.
-
 ## What Makes a System "Agentic"?
 
 An **agent** is more than a chatbot. It has:
@@ -51,8 +49,8 @@ Final Answer
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/alfasin/alfasin-stock-weather-agent-ts.git
-cd alfasin-stock-weather-agent-ts
+git clone https://github.com/alfasin/stock-weather-agent-ts.git
+cd stock-weather-agent-ts
 npm install
 ```
 
@@ -178,4 +176,4 @@ Cache files (`cache/stock_${TICKER}_${YYYY-MM-DD}.json`, `cache/weather_${city_k
 
 - ESM-only (`"type": "module"`). Imports use the `.js` extension (TS convention for ESM source).
 - `tsx` runs `.ts` files directly — no build step required for the workshop. `npm run build` is available if you want to emit `dist/`.
-- Solutions to all exercises live on the [`solutions`](https://github.com/alfasin/alfasin-stock-weather-agent-ts/tree/solutions) branch — instructors only.
+- Solutions to all exercises live on the [`solutions`](https://github.com/alfasin/stock-weather-agent-ts/tree/solutions) branch — instructors only.
